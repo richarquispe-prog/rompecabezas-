@@ -131,6 +131,7 @@ function generatePuzzle(level) {
 function createPuzzlePiece(correctIndex, currentPosition, config, imageUrl) {
     const piece = document.createElement('div');
     piece.className = 'puzzle-piece';
+    piece.draggable = true;
     piece.dataset.correctIndex = correctIndex;
     piece.dataset.currentPosition = currentPosition;
     
@@ -151,15 +152,36 @@ function createPuzzlePiece(correctIndex, currentPosition, config, imageUrl) {
     piece.style.width = `${pieceWidth}px`;
     piece.style.height = `${pieceHeight}px`;
     
-    // Event listener para click/tap
-    piece.addEventListener('click', () => handlePieceClick(piece));
+    // Event listener para click/tap (intercambiar)
+    piece.addEventListener('click', (e) => {
+        // Solo si no está arrastrando
+        if (!piece.classList.contains('dragging')) {
+            handlePieceClick(piece);
+        }
+    });
+    
+    // Event listeners para drag (desktop)
+    piece.addEventListener('dragstart', handleDragStart);
+    piece.addEventListener('dragend', handleDragEnd);
+    piece.addEventListener('dragover', handleDragOver);
+    piece.addEventListener('drop', handleDrop);
+    
+    // Event listeners para touch (mobile) - drag & drop táctil
+    piece.addEventListener('touchstart', handleTouchStart, { passive: false });
+    piece.addEventListener('touchmove', handleTouchMove, { passive: false });
+    piece.addEventListener('touchend', handleTouchEnd, { passive: false });
     
     return piece;
 }
 
-// ==================== Click/Tap Handlers ====================
+// ==================== Click/Tap Handlers (Intercambio) ====================
+
+let clickTimeout = null;
 
 function handlePieceClick(piece) {
+    // Cancelar si se está arrastrando
+    if (piece.classList.contains('dragging')) return;
+    
     // Si no hay pieza seleccionada, seleccionar esta
     if (!gameState.selectedPiece) {
         gameState.selectedPiece = piece;
@@ -183,6 +205,151 @@ function handlePieceClick(piece) {
         piece1.classList.remove('selected');
         gameState.selectedPiece = null;
     }
+}
+
+// ==================== Drag & Drop Handlers (Desktop) ====================
+
+let draggedPiece = null;
+
+function handleDragStart(e) {
+    draggedPiece = e.target;
+    e.target.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    
+    // Deseleccionar si estaba seleccionado
+    if (gameState.selectedPiece === e.target) {
+        gameState.selectedPiece = null;
+        e.target.classList.remove('selected');
+    }
+}
+
+function handleDragEnd(e) {
+    e.target.classList.remove('dragging');
+    draggedPiece = null;
+}
+
+function handleDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    
+    if (e.target.classList.contains('puzzle-piece')) {
+        e.target.classList.add('drag-over');
+    }
+}
+
+function handleDrop(e) {
+    e.preventDefault();
+    
+    if (!draggedPiece) return;
+    
+    const targetPiece = e.target;
+    
+    // Solo permitir drop sobre otra pieza
+    if (targetPiece.classList.contains('puzzle-piece') && targetPiece !== draggedPiece) {
+        targetPiece.classList.remove('drag-over');
+        swapPieces(draggedPiece, targetPiece);
+    }
+}
+
+// ==================== Touch Handlers (Mobile Drag & Drop) ====================
+
+let touchedPiece = null;
+let touchStartX = 0;
+let touchStartY = 0;
+let touchMoved = false;
+let touchStartTime = 0;
+
+function handleTouchStart(e) {
+    touchedPiece = e.target;
+    const touch = e.touches[0];
+    touchStartX = touch.clientX;
+    touchStartY = touch.clientY;
+    touchMoved = false;
+    touchStartTime = Date.now();
+    
+    // Deseleccionar si estaba seleccionado
+    if (gameState.selectedPiece === touchedPiece) {
+        gameState.selectedPiece = null;
+        touchedPiece.classList.remove('selected');
+    }
+}
+
+function handleTouchMove(e) {
+    if (!touchedPiece) return;
+    
+    const touch = e.touches[0];
+    const deltaX = Math.abs(touch.clientX - touchStartX);
+    const deltaY = Math.abs(touch.clientY - touchStartY);
+    
+    // Si se movió más de 10px, es un drag
+    if (deltaX > 10 || deltaY > 10) {
+        e.preventDefault();
+        touchMoved = true;
+        touchedPiece.classList.add('dragging');
+        
+        // Mover visualmente la pieza
+        touchedPiece.style.position = 'fixed';
+        touchedPiece.style.left = touch.clientX - (touchedPiece.offsetWidth / 2) + 'px';
+        touchedPiece.style.top = touch.clientY - (touchedPiece.offsetHeight / 2) + 'px';
+        touchedPiece.style.zIndex = '1000';
+        touchedPiece.style.opacity = '0.8';
+        
+        // Resaltar pieza debajo
+        const elementBelow = document.elementFromPoint(touch.clientX, touch.clientY);
+        
+        // Remover highlight de todas las piezas
+        document.querySelectorAll('.puzzle-piece').forEach(p => {
+            if (p !== touchedPiece) {
+                p.classList.remove('drag-over');
+            }
+        });
+        
+        // Agregar highlight a la pieza debajo
+        if (elementBelow && elementBelow.classList.contains('puzzle-piece') && elementBelow !== touchedPiece) {
+            elementBelow.classList.add('drag-over');
+        }
+    }
+}
+
+function handleTouchEnd(e) {
+    if (!touchedPiece) return;
+    
+    const touchDuration = Date.now() - touchStartTime;
+    const touch = e.changedTouches[0];
+    
+    // Si fue un drag (se movió)
+    if (touchMoved) {
+        e.preventDefault();
+        
+        const elementBelow = document.elementFromPoint(touch.clientX, touch.clientY);
+        
+        // Resetear estilos
+        touchedPiece.style.position = '';
+        touchedPiece.style.left = '';
+        touchedPiece.style.top = '';
+        touchedPiece.style.zIndex = '';
+        touchedPiece.style.opacity = '';
+        touchedPiece.classList.remove('dragging');
+        
+        // Remover highlights
+        document.querySelectorAll('.puzzle-piece').forEach(p => {
+            p.classList.remove('drag-over');
+        });
+        
+        // Si se soltó sobre otra pieza, intercambiar
+        if (elementBelow && elementBelow.classList.contains('puzzle-piece') && elementBelow !== touchedPiece) {
+            swapPieces(touchedPiece, elementBelow);
+        } else {
+            showMessage("⚠️ Arrastra sobre otra pieza para intercambiar", 'error');
+        }
+    }
+    // Si fue un tap rápido (no se movió), es un click
+    else if (touchDuration < 300) {
+        // Dejar que el evento click lo maneje
+    }
+    
+    touchedPiece = null;
+    touchMoved = false;
 }
 
 function swapPieces(piece1, piece2) {
@@ -210,29 +377,43 @@ function checkPiecesPosition(piece1, piece2) {
     const piece1Correct = parseInt(piece1.dataset.correctIndex) === parseInt(piece1.dataset.currentPosition);
     const piece2Correct = parseInt(piece2.dataset.correctIndex) === parseInt(piece2.dataset.currentPosition);
     
+    let hasCorrect = false;
+    let hasError = false;
+    
     // Verificar piece1
     if (piece1Correct) {
         piece1.classList.add('correct');
-        showMessage(getRandomMessage('success'), 'success');
+        hasCorrect = true;
         gameState.score += Math.floor(GAME_CONFIG.levels[gameState.currentLevel].points / gameState.totalPieces);
     } else {
         piece1.classList.remove('correct');
-        if (!piece2Correct) {
-            showMessage(getRandomMessage('error'), 'error');
-            gameState.errors++;
-        }
+        hasError = true;
     }
     
     // Verificar piece2
     if (piece2Correct) {
         piece2.classList.add('correct');
-        if (!piece1Correct) {
-            showMessage(getRandomMessage('success'), 'success');
-        }
+        hasCorrect = true;
         gameState.score += Math.floor(GAME_CONFIG.levels[gameState.currentLevel].points / gameState.totalPieces);
     } else {
         piece2.classList.remove('correct');
+        hasError = true;
     }
+    
+    // Mostrar mensaje según resultado
+    if (hasCorrect && !hasError) {
+        // Ambas correctas
+        showMessage("🎯 " + getRandomMessage('success') + " ¡Ambas piezas correctas!", 'success');
+    } else if (hasCorrect) {
+        // Una correcta, una incorrecta
+        showMessage("👍 " + getRandomMessage('success') + " ¡Pero la otra no!", 'success');
+    } else {
+        // Ambas incorrectas
+        showMessage("❌ " + getRandomMessage('error'), 'error');
+        gameState.errors++;
+    }
+    
+    updateDisplay();
     
     // Verificar si completó el nivel
     checkLevelComplete();
@@ -252,14 +433,24 @@ function checkLevelComplete() {
 
 // ==================== Mensajes ====================
 
+let messageTimeout = null;
+
 function showMessage(text, type) {
+    // Limpiar timeout anterior si existe
+    if (messageTimeout) {
+        clearTimeout(messageTimeout);
+    }
+    
     elements.messageBox.textContent = text;
     elements.messageBox.className = `message-box ${type}`;
     elements.messageBox.classList.remove('hidden');
     
-    setTimeout(() => {
+    // Duración más larga para mensajes de victoria
+    const duration = type === 'success' && text.includes('completado') ? 3500 : 2500;
+    
+    messageTimeout = setTimeout(() => {
         elements.messageBox.classList.add('hidden');
-    }, 2000);
+    }, duration);
 }
 
 function getRandomMessage(type) {
@@ -276,7 +467,7 @@ function levelCompleted() {
     updateDisplay();
     
     // Animación de victoria
-    elements.targetArea.classList.add('victory-animation');
+    elements.puzzleArea.classList.add('victory-animation');
     
     // Confeti
     createConfetti();
@@ -288,12 +479,16 @@ function levelCompleted() {
             showFinalMessage();
         }, 3000);
     } else {
-        showMessage(`🎉 ¡Nivel ${gameState.currentLevel} completado! 🎉`, 'success');
-        elements.nextBtn.classList.remove('hidden');
+        showMessage(`🎊 ¡Nivel ${gameState.currentLevel} completado! Avanzando al nivel ${gameState.currentLevel + 1}...`, 'success');
+        
+        // Avanzar automáticamente al siguiente nivel después de 3 segundos
+        setTimeout(() => {
+            startGame(gameState.currentLevel + 1);
+        }, 3000);
     }
     
     setTimeout(() => {
-        elements.targetArea.classList.remove('victory-animation');
+        elements.puzzleArea.classList.remove('victory-animation');
     }, 1000);
 }
 
