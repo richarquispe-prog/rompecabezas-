@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🧩 Rompecabezas Liluz - ¡Diviértete!</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Pantalla de Inicio -->
+    <div id="startScreen" class="screen">
+        <div class="start-container">
+            <h1 class="game-title">🧩 Rompecabezas Liluz 🧩</h1>
+            <p class="subtitle">¡Arrastra las piezas a su lugar correcto!</p>
+            <div class="level-selector">
+                <h2>Selecciona el Nivel</h2>
+                <div class="level-buttons">
+                    <button class="level-btn" data-level="1">Nivel 1<br><span>6 piezas</span></button>
+                    <button class="level-btn" data-level="2">Nivel 2<br><span>8 piezas</span></button>
+                    <button class="level-btn" data-level="3">Nivel 3<br><span>12 piezas</span></button>
+                    <button class="level-btn" data-level="4">Nivel 4<br><span>15 piezas</span></button>
+                    <button class="level-btn" data-level="5">Nivel 5<br><span>18 piezas</span></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pantalla de Juego -->
+    <div id="gameScreen" class="screen hidden">
+        <div class="game-container">
+            <!-- Header del Juego -->
+            <div class="game-header">
+                <h1>🧩 Nivel <span id="currentLevel">1</span></h1>
+                <div class="stats">
+                    <div class="stat">
+                        <span class="stat-label">Movimientos:</span>
+                        <span id="moveCount" class="stat-value">0</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-label">Errores:</span>
+                        <span id="errorCount" class="stat-value">0</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-label">Puntos:</span>
+                        <span id="score" class="stat-value">0</span>
+                    </div>
+                </div>
+                <button id="backBtn" class="control-btn">Volver</button>
+            </div>
+
+            <!-- Mensaje de Feedback -->
+            <div id="messageBox" class="message-box hidden"></div>
+
+            <!-- Área Objetivo (Plantilla) - ARRIBA -->
+            <div class="puzzle-section target-section">
+                <h3>👆 Completa el Rompecabezas Aquí 👆</h3>
+                <div id="targetArea" class="target-area"></div>
+            </div>
+
+            <!-- Área de Piezas Desordenadas - ABAJO -->
+            <div class="puzzle-section pieces-section">
+                <h3>👇 Arrastra las Piezas 👇</h3>
+                <div id="piecesArea" class="pieces-area"></div>
+            </div>
+
+            <!-- Botones de Control -->
+            <div class="control-buttons">
+                <button id="restartBtn" class="control-btn">Reiniciar Nivel</button>
+                <button id="nextBtn" class="control-btn hidden">Siguiente Nivel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Overlay de Confeti -->
+    <div id="confettiOverlay" class="confetti-overlay hidden"></div>
+
+    <script src="script.js"></script>
+</body>
+</html>
+
