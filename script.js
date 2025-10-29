@@ -43,7 +43,7 @@ let gameState = {
     errors: 0,
     score: 0,
     pieces: [],
-    correctPlacements: 0,
+    selectedPiece: null,
     totalPieces: 0
 };
 
@@ -56,8 +56,7 @@ const elements = {
     errorCount: document.getElementById('errorCount'),
     scoreDisplay: document.getElementById('score'),
     messageBox: document.getElementById('messageBox'),
-    piecesArea: document.getElementById('piecesArea'),
-    targetArea: document.getElementById('targetArea'),
+    puzzleArea: document.getElementById('puzzleArea'),
     restartBtn: document.getElementById('restartBtn'),
     nextBtn: document.getElementById('nextBtn'),
     backBtn: document.getElementById('backBtn'),
@@ -94,7 +93,7 @@ function startGame(level) {
     gameState.currentLevel = level;
     gameState.moves = 0;
     gameState.errors = 0;
-    gameState.correctPlacements = 0;
+    gameState.selectedPiece = null;
     
     const config = GAME_CONFIG.levels[level];
     gameState.totalPieces = config.pieces;
@@ -111,42 +110,32 @@ function generatePuzzle(level) {
     const config = GAME_CONFIG.levels[level];
     const imageUrl = GAME_CONFIG.images[level - 1];
     
-    // Limpiar áreas
-    elements.piecesArea.innerHTML = '';
-    elements.targetArea.innerHTML = '';
+    // Limpiar área
+    elements.puzzleArea.innerHTML = '';
     
     // Configurar grid
-    elements.piecesArea.style.gridTemplateColumns = `repeat(${config.cols}, 1fr)`;
-    elements.targetArea.style.gridTemplateColumns = `repeat(${config.cols}, 1fr)`;
+    elements.puzzleArea.style.gridTemplateColumns = `repeat(${config.cols}, 1fr)`;
     
-    // Crear slots de destino
-    const slots = [];
-    for (let i = 0; i < config.pieces; i++) {
-        const slot = createDropSlot(i, config);
-        elements.targetArea.appendChild(slot);
-        slots.push(slot);
-    }
-    
-    // Crear piezas
+    // Crear piezas en orden y luego desordenar
     const pieceIndices = Array.from({ length: config.pieces }, (_, i) => i);
     shuffleArray(pieceIndices);
     
     gameState.pieces = [];
-    pieceIndices.forEach(index => {
-        const piece = createPuzzlePiece(index, config, imageUrl);
-        elements.piecesArea.appendChild(piece);
+    pieceIndices.forEach((correctIndex, currentPosition) => {
+        const piece = createPuzzlePiece(correctIndex, currentPosition, config, imageUrl);
+        elements.puzzleArea.appendChild(piece);
         gameState.pieces.push(piece);
     });
 }
 
-function createPuzzlePiece(index, config, imageUrl) {
+function createPuzzlePiece(correctIndex, currentPosition, config, imageUrl) {
     const piece = document.createElement('div');
     piece.className = 'puzzle-piece';
-    piece.draggable = true;
-    piece.dataset.correctIndex = index;
+    piece.dataset.correctIndex = correctIndex;
+    piece.dataset.currentPosition = currentPosition;
     
-    const row = Math.floor(index / config.cols);
-    const col = index % config.cols;
+    const row = Math.floor(correctIndex / config.cols);
+    const col = correctIndex % config.cols;
     
     // Tamaño responsive basado en el viewport - Proporción vertical (3:4)
     const containerWidth = Math.min(window.innerWidth - 60, 450);
@@ -162,220 +151,103 @@ function createPuzzlePiece(index, config, imageUrl) {
     piece.style.width = `${pieceWidth}px`;
     piece.style.height = `${pieceHeight}px`;
     
-    // Guardar datos para responsive
-    piece.dataset.row = row;
-    piece.dataset.col = col;
-    
-    // Event listeners para drag (desktop)
-    piece.addEventListener('dragstart', handleDragStart);
-    piece.addEventListener('dragend', handleDragEnd);
-    
-    // Event listeners para touch (mobile)
-    piece.addEventListener('touchstart', handleTouchStart, { passive: false });
-    piece.addEventListener('touchmove', handleTouchMove, { passive: false });
-    piece.addEventListener('touchend', handleTouchEnd, { passive: false });
+    // Event listener para click/tap
+    piece.addEventListener('click', () => handlePieceClick(piece));
     
     return piece;
 }
 
-function createDropSlot(index, config) {
-    const slot = document.createElement('div');
-    slot.className = 'drop-slot';
-    slot.dataset.index = index;
-    
-    const row = Math.floor(index / config.cols);
-    const col = index % config.cols;
-    
-    // Tamaño responsive basado en el viewport - Proporción vertical (3:4)
-    const containerWidth = Math.min(window.innerWidth - 60, 450);
-    const aspectRatio = 4 / 3; // Imagen vertical (más alta que ancha)
-    const containerHeight = containerWidth * aspectRatio;
-    
-    const pieceWidth = containerWidth / config.cols;
-    const pieceHeight = containerHeight / config.rows;
-    
-    slot.style.width = `${pieceWidth}px`;
-    slot.style.height = `${pieceHeight}px`;
-    
-    // Event listeners para drop
-    slot.addEventListener('dragover', handleDragOver);
-    slot.addEventListener('drop', handleDrop);
-    slot.addEventListener('dragleave', handleDragLeave);
-    
-    return slot;
-}
+// ==================== Click/Tap Handlers ====================
 
-// ==================== Drag & Drop Handlers ====================
-
-let draggedPiece = null;
-let touchedPiece = null;
-let touchStartX = 0;
-let touchStartY = 0;
-
-function handleDragStart(e) {
-    draggedPiece = e.target;
-    e.target.classList.add('dragging');
-    e.dataTransfer.effectAllowed = 'move';
-}
-
-function handleDragEnd(e) {
-    e.target.classList.remove('dragging');
-}
-
-function handleDragOver(e) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    
-    if (!e.target.classList.contains('filled')) {
-        e.target.classList.add('drag-over');
-    }
-}
-
-function handleDragLeave(e) {
-    e.target.classList.remove('drag-over');
-}
-
-function handleDrop(e) {
-    e.preventDefault();
-    e.target.classList.remove('drag-over');
-    
-    const slot = e.target;
-    
-    // No permitir drop en slots ya ocupados
-    if (slot.classList.contains('filled')) {
-        return;
-    }
-    
-    const correctIndex = parseInt(draggedPiece.dataset.correctIndex);
-    const slotIndex = parseInt(slot.dataset.index);
-    
-    validatePiecePlacement(draggedPiece, slot, correctIndex, slotIndex);
-}
-
-// ==================== Touch Handlers (Mobile) ====================
-
-function handleTouchStart(e) {
-    e.preventDefault();
-    touchedPiece = e.target;
-    touchedPiece.classList.add('touching');
-    
-    const touch = e.touches[0];
-    touchStartX = touch.clientX;
-    touchStartY = touch.clientY;
-}
-
-function handleTouchMove(e) {
-    e.preventDefault();
-    
-    if (!touchedPiece) return;
-    
-    const touch = e.touches[0];
-    const currentX = touch.clientX;
-    const currentY = touch.clientY;
-    
-    // Mover visualmente la pieza con el dedo
-    touchedPiece.style.position = 'fixed';
-    touchedPiece.style.left = currentX - (touchedPiece.offsetWidth / 2) + 'px';
-    touchedPiece.style.top = currentY - (touchedPiece.offsetHeight / 2) + 'px';
-    touchedPiece.style.zIndex = '1000';
-    
-    // Resaltar el slot debajo del dedo
-    const elementBelow = document.elementFromPoint(currentX, currentY);
-    
-    // Remover highlight de todos los slots
-    document.querySelectorAll('.drop-slot').forEach(slot => {
-        slot.classList.remove('drag-over');
-    });
-    
-    // Agregar highlight al slot debajo si existe
-    if (elementBelow && elementBelow.classList.contains('drop-slot')) {
-        if (!elementBelow.classList.contains('filled')) {
-            elementBelow.classList.add('drag-over');
-        }
-    }
-}
-
-function handleTouchEnd(e) {
-    e.preventDefault();
-    
-    if (!touchedPiece) return;
-    
-    const touch = e.changedTouches[0];
-    const elementBelow = document.elementFromPoint(touch.clientX, touch.clientY);
-    
-    // Resetear estilos
-    touchedPiece.style.position = '';
-    touchedPiece.style.left = '';
-    touchedPiece.style.top = '';
-    touchedPiece.style.zIndex = '';
-    touchedPiece.classList.remove('touching');
-    
-    // Remover highlight de todos los slots
-    document.querySelectorAll('.drop-slot').forEach(slot => {
-        slot.classList.remove('drag-over');
-    });
-    
-    // Verificar si se soltó en un slot válido
-    if (elementBelow && elementBelow.classList.contains('drop-slot')) {
-        const slot = elementBelow;
+function handlePieceClick(piece) {
+    // Si no hay pieza seleccionada, seleccionar esta
+    if (!gameState.selectedPiece) {
+        gameState.selectedPiece = piece;
+        piece.classList.add('selected');
+        showMessage("✨ ¡Toca otra pieza para intercambiar!", 'success');
+    } 
+    // Si la misma pieza, deseleccionar
+    else if (gameState.selectedPiece === piece) {
+        piece.classList.remove('selected');
+        gameState.selectedPiece = null;
+        showMessage("⚠️ Pieza deseleccionada", 'error');
+    } 
+    // Si es otra pieza, intercambiar
+    else {
+        const piece1 = gameState.selectedPiece;
+        const piece2 = piece;
         
-        if (!slot.classList.contains('filled')) {
-            const correctIndex = parseInt(touchedPiece.dataset.correctIndex);
-            const slotIndex = parseInt(slot.dataset.index);
-            
-            validatePiecePlacement(touchedPiece, slot, correctIndex, slotIndex);
-        }
+        swapPieces(piece1, piece2);
+        
+        // Deseleccionar
+        piece1.classList.remove('selected');
+        gameState.selectedPiece = null;
     }
-    
-    touchedPiece = null;
 }
 
-// ==================== Validación de Colocación ====================
-
-function validatePiecePlacement(piece, slot, correctIndex, slotIndex) {
+function swapPieces(piece1, piece2) {
     gameState.moves++;
-    updateDisplay();
     
-    // Verificar si es correcto
-    if (correctIndex === slotIndex) {
-        // ¡Correcto!
-        placePieceCorrectly(piece, slot);
+    // Intercambiar posiciones en el DOM
+    const parent = piece1.parentNode;
+    const sibling1 = piece1.nextSibling === piece2 ? piece1 : piece1.nextSibling;
+    
+    piece2.parentNode.insertBefore(piece1, piece2);
+    parent.insertBefore(piece2, sibling1);
+    
+    // Intercambiar datasets de posición
+    const tempPosition = piece1.dataset.currentPosition;
+    piece1.dataset.currentPosition = piece2.dataset.currentPosition;
+    piece2.dataset.currentPosition = tempPosition;
+    
+    // Verificar si están correctas después del intercambio
+    checkPiecesPosition(piece1, piece2);
+    
+    updateDisplay();
+}
+
+function checkPiecesPosition(piece1, piece2) {
+    const piece1Correct = parseInt(piece1.dataset.correctIndex) === parseInt(piece1.dataset.currentPosition);
+    const piece2Correct = parseInt(piece2.dataset.correctIndex) === parseInt(piece2.dataset.currentPosition);
+    
+    // Verificar piece1
+    if (piece1Correct) {
+        piece1.classList.add('correct');
         showMessage(getRandomMessage('success'), 'success');
-        gameState.correctPlacements++;
         gameState.score += Math.floor(GAME_CONFIG.levels[gameState.currentLevel].points / gameState.totalPieces);
-        updateDisplay();
-        
-        // Verificar si completó el nivel
-        if (gameState.correctPlacements === gameState.totalPieces) {
-            setTimeout(() => {
-                levelCompleted();
-            }, 500);
-        }
     } else {
-        // Incorrecto
-        piece.classList.add('incorrect');
-        showMessage(getRandomMessage('error'), 'error');
-        gameState.errors++;
-        updateDisplay();
-        
+        piece1.classList.remove('correct');
+        if (!piece2Correct) {
+            showMessage(getRandomMessage('error'), 'error');
+            gameState.errors++;
+        }
+    }
+    
+    // Verificar piece2
+    if (piece2Correct) {
+        piece2.classList.add('correct');
+        if (!piece1Correct) {
+            showMessage(getRandomMessage('success'), 'success');
+        }
+        gameState.score += Math.floor(GAME_CONFIG.levels[gameState.currentLevel].points / gameState.totalPieces);
+    } else {
+        piece2.classList.remove('correct');
+    }
+    
+    // Verificar si completó el nivel
+    checkLevelComplete();
+}
+
+function checkLevelComplete() {
+    const allCorrect = gameState.pieces.every(piece => {
+        return parseInt(piece.dataset.correctIndex) === parseInt(piece.dataset.currentPosition);
+    });
+    
+    if (allCorrect) {
         setTimeout(() => {
-            piece.classList.remove('incorrect');
+            levelCompleted();
         }, 500);
     }
-}
-
-function placePieceCorrectly(piece, slot) {
-    piece.classList.add('correct');
-    piece.draggable = false;
-    slot.classList.add('filled');
-    
-    // Mover la pieza al slot
-    slot.appendChild(piece);
-    
-    // Ajustar estilos
-    piece.style.width = '100%';
-    piece.style.height = '100%';
-    piece.style.margin = '0';
 }
 
 // ==================== Mensajes ====================
@@ -507,30 +379,29 @@ window.addEventListener('resize', () => {
         // Solo redimensionar si estamos en pantalla de juego
         if (!elements.gameScreen.classList.contains('hidden')) {
             const currentLevel = gameState.currentLevel;
-            // Regenerar las piezas con el nuevo tamaño
             if (currentLevel && gameState.pieces.length > 0) {
-                // Guardar el estado actual de piezas colocadas
-                const placedPieces = [];
-                document.querySelectorAll('.drop-slot.filled').forEach(slot => {
-                    const piece = slot.querySelector('.puzzle-piece');
-                    if (piece) {
-                        placedPieces.push({
-                            slotIndex: slot.dataset.index,
-                            pieceIndex: piece.dataset.correctIndex
-                        });
-                    }
-                });
+                // Guardar el orden actual de las piezas
+                const currentOrder = gameState.pieces.map(piece => ({
+                    correctIndex: piece.dataset.correctIndex,
+                    currentPosition: piece.dataset.currentPosition,
+                    isCorrect: piece.classList.contains('correct')
+                }));
                 
-                // Regenerar el puzzle
-                generatePuzzle(currentLevel);
+                // Regenerar el puzzle con el orden guardado
+                const config = GAME_CONFIG.levels[currentLevel];
+                const imageUrl = GAME_CONFIG.images[currentLevel - 1];
                 
-                // Restaurar las piezas colocadas
-                placedPieces.forEach(placement => {
-                    const piece = document.querySelector(`.puzzle-piece[data-correct-index="${placement.pieceIndex}"]`);
-                    const slot = document.querySelector(`.drop-slot[data-index="${placement.slotIndex}"]`);
-                    if (piece && slot) {
-                        placePieceCorrectly(piece, slot);
+                elements.puzzleArea.innerHTML = '';
+                elements.puzzleArea.style.gridTemplateColumns = `repeat(${config.cols}, 1fr)`;
+                
+                gameState.pieces = [];
+                currentOrder.forEach((data, index) => {
+                    const piece = createPuzzlePiece(parseInt(data.correctIndex), parseInt(data.currentPosition), config, imageUrl);
+                    if (data.isCorrect) {
+                        piece.classList.add('correct');
                     }
+                    elements.puzzleArea.appendChild(piece);
+                    gameState.pieces.push(piece);
                 });
             }
         }
